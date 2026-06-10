@@ -1,0 +1,117 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+import pingouin as pg
+
+def read():
+    df = pd.read_csv("heart_disease_uci.csv")
+    return df
+
+def figures(df):
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15,7))
+    agehist(df, axes[0])
+    scatter(df, axes[1])
+    plt.savefig('dashboardw5.png')
+
+def agehist(df, ax):
+    colors = [
+        "#E69F00",
+        "#56B4E9",
+        "#009E73",
+        "#F0E442",
+        "#0072B2",
+        "#D55E00",
+        "#CC79A7",
+        "#000000",
+    ]
+    labels = ["Typical Angina", "Asymptomatic", "Non-Anginal", "Atypical Angina"]
+    for i, value in enumerate(df["cp"].unique()):
+        cpg = df[df["cp"] == value]["age"]
+        position = 1 + i
+        
+        # VIOLIN
+        violin1 = ax.violinplot(cpg, positions=[position], side="low", showextrema=False)
+        for body in violin1["bodies"]:
+            body.set_color(colors[i])
+            body.set_alpha(0.6)
+        violin2 = ax.violinplot(cpg, positions=[position], side="high", showextrema=False, widths=1)
+        for body in violin2["bodies"]:
+            body.set_color(colors[i])
+            body.set_alpha(0.3)
+
+        # BARS
+        bars = 10
+        maxval = cpg.max()
+        minval = cpg.min()
+        barheight = (maxval - minval) / bars
+        bargroup = []
+        for j in range(bars):
+            condition = (cpg > minval + barheight * j) & (cpg <= minval + barheight * (j + 1))
+            bargroup.append(int(cpg[condition].count()))
+        scalingfactor = pd.DataFrame(bargroup).max()
+        for j in range(bars):
+            condition = (cpg > minval + barheight * j) & (cpg <= minval + barheight * (j + 1))
+            barwidth = cpg[condition].count() / (2 * scalingfactor)
+            ax.barh(
+                y=(barheight * (0.5 + j) + minval),
+                width=barwidth,
+                left=position,
+                height=barheight * 0.9,
+                color=colors[i],
+            )
+
+        # BOXPLOT
+        boxplot = ax.boxplot(
+            cpg,
+            positions=[position],
+            patch_artist=True,
+            boxprops=dict(facecolor="none", color="black"),
+            medianprops=dict(color="black"),
+            whiskerprops=dict(color="black"),
+            capprops=dict(color="black"),
+            flierprops=dict(markeredgecolor="purple"),
+        )
+        
+        # TEXT
+        ax.text(1 + i, 23, labels[i], ha="center", fontname="sans-serif")
+        ax.text(1.25 + i, cpg.median() - 0.5, f"{round(cpg.median(), 1)}", ha="center", fontname="sans-serif",)
+
+    # FINAL FORMATTING
+    ax.set_xlim(0.5, 4.75)
+    ax.xaxis.set_visible(False)
+    ax.set_ylabel("Age", fontname="sans-serif")
+    ax.set_title("Age Distribution of Chest Pain Patients", fontname="sans-serif")
+
+def scatter(df, ax):
+    # SCATTER
+    sns.scatterplot(data=df, x='age', y='thalch', ax=ax, alpha=0.4, hue='cp')
+    sns.regplot(data=df, x='age', y='thalch', ax=ax, scatter=False)
+    ax.set_title('Age vs. Maximum Heart Rate of Chest Pain Patients', fontfamily='sans-serif')
+    ax.set_xlabel('Age', fontfamily='sans-serif')
+    ax.set_ylabel('Maximum Heart Rate (bpm)', fontfamily='sans-serif')
+    ax.text(75, 190, 'r = -0.355\nci95 = 13\nH = 79.63\np < 0.001', ha='center', fontfamily='sans-serif')
+
+def statisticals(df):
+    df = df[df['chol'].notna()]
+    df = df[df['chol'] != 0]
+    lower_age = df['age'].min()
+    dev = (df['age'].max() - lower_age)/5
+    df['group'] = None
+    print(pg.pairwise_corr(df, columns=['age', 'trestbps', 'chol', 'thalch', 'oldpeak'], method='pearson'))
+    for j in range(5):
+        df.loc[(df['age'] >= (dev*(j) + lower_age)) & (df['age'] < (dev*(1+j) + lower_age)), 'group'] = j
+    df['group'] = pd.to_numeric(df['group'], errors='coerce')
+    x = 'thalch'
+    y = 'group'
+    print(df.groupby(y)[x].agg(['mean', 'median', 'count']))
+    print(pg.kruskal(data=df, dv=x, between=y))
+    print(pg.linear_regression(X=df[y], y=df[x], remove_na=True))
+
+df = read()
+print(df.columns)
+figures(df)
+#statisticals(df)
